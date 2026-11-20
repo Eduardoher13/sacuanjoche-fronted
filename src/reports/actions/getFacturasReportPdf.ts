@@ -21,7 +21,9 @@ export const getFacturasReportPdf = async (
     });
 
     // Verificar que la respuesta sea realmente un PDF
-    const contentType = response.headers['content-type'] || '';
+    const contentType = String(
+      response.headers['content-type'] ?? ''
+    ).toLowerCase();
     if (contentType.includes('text/html')) {
       throw new Error(
         'El servidor devolvió una respuesta HTML en lugar de un PDF. Esto puede indicar que el endpoint no existe o hay un error en el servidor.'

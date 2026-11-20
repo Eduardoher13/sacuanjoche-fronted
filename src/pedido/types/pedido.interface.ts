@@ -121,7 +121,7 @@ export interface ContactoEntrega {
   idContactoEntrega: number;
   nombre: string;
   apellido: string;
-  telefono: string;
+  telefono: string | null;
 }
 
 export interface Direccion {

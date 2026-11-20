@@ -25,7 +25,6 @@ import type { CreateDireccionDto } from '@/cliente/types/direccion.interface';
 import type { Carrito } from '../types/carrito.interface';
 import {
   formatTelefono,
-  validateTelefono,
   formatTelefonoForBackend,
 } from '@/shared/utils/validation';
 
@@ -45,6 +44,10 @@ export default function CompletarPedidoPage() {
   const { carrito, subtotal, itemCount, refetch, isLoading: isLoadingCarrito } = useCarrito();
   const [isProcessing, setIsProcessing] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [confirmTelefonoOpen, setConfirmTelefonoOpen] = useState(false);
+  const [pendingCheckoutData, setPendingCheckoutData] =
+    useState<CompletarPedidoFormData | null>(null);
+  const confirmarTelefonoRef = useRef(false);
 
   // Ref para evitar ejecuciones múltiples del useEffect
   const verificandoRef = useRef(false);
@@ -238,6 +241,22 @@ export default function CompletarPedidoPage() {
       navigate('/carrito/checkout', { replace: true });
       return;
     }
+
+    const telefonoIngresado = data.contactoTelefono?.trim() || '';
+    const digitosTelefono = telefonoIngresado.replace(/\D/g, '');
+    const telefonoValido =
+      digitosTelefono.length === 8 ||
+      (digitosTelefono.startsWith('505') && digitosTelefono.length === 11);
+
+    if (
+      (!telefonoIngresado || !telefonoValido) &&
+      !confirmarTelefonoRef.current
+    ) {
+      setPendingCheckoutData(data);
+      setConfirmTelefonoOpen(true);
+      return;
+    }
+    confirmarTelefonoRef.current = false;
     
     // Si tenemos idPago pero no información del pago, hacer un último refetch antes de continuar
     if (carritoTyped.idPago && !carritoTyped.pago) {
@@ -347,15 +366,10 @@ export default function CompletarPedidoPage() {
         throw new Error('Debes seleccionar o crear una dirección de entrega');
       }
 
-      // Validar teléfono
-      const telefonoError = validateTelefono(data.contactoTelefono);
-      if (telefonoError) {
-        toast.error(telefonoError);
-        return;
-      }
-
-      // Formatear teléfono para backend (agregar 505 internamente)
-      const telefonoBackend = formatTelefonoForBackend(data.contactoTelefono);
+      const telefonoIngresado = data.contactoTelefono?.trim() || '';
+      const telefonoBackend = telefonoIngresado
+        ? formatTelefonoForBackend(telefonoIngresado)
+        : null;
 
       // Crear contacto de entrega
       const contacto = await createContactoEntrega({
@@ -596,7 +610,7 @@ export default function CompletarPedidoPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="contactoTelefono">Teléfono * (8 dígitos)</Label>
+                    <Label htmlFor="contactoTelefono">Teléfono (opcional, 8 dígitos)</Label>
                     <div className="flex items-center">
                       <div className="flex items-center justify-center h-11 px-3 bg-gray-100 border border-r-0 border-gray-300 rounded-l-md text-sm font-medium text-gray-700">
                         +505
@@ -604,13 +618,7 @@ export default function CompletarPedidoPage() {
                       <Input
                         id="contactoTelefono"
                         type="tel"
-                        {...register('contactoTelefono', {
-                          required: 'El teléfono es requerido',
-                          pattern: {
-                            value: /^\d{8}$/,
-                            message: 'El teléfono debe tener 8 dígitos',
-                          },
-                        })}
+                        {...register('contactoTelefono')}
                         onChange={handleContactoTelefonoChange}
                         className="bg-white border-gray-300 text-gray-900 h-11 text-base rounded-l-none"
                         placeholder="12345678"
@@ -619,6 +627,11 @@ export default function CompletarPedidoPage() {
                     </div>
                     {errors.contactoTelefono && (
                       <p className="text-sm text-red-600 mt-1">{errors.contactoTelefono.message}</p>
+                    )}
+                    {!watch('contactoTelefono')?.trim() && (
+                      <p className="text-sm text-red-600 mt-1 font-medium">
+                        Sin número celular de entrega
+                      </p>
                     )}
                   </div>
                 </CardContent>
@@ -688,6 +701,56 @@ export default function CompletarPedidoPage() {
           </div>
         </form>
       </div>
+      {confirmTelefonoOpen && (
+        <div
+          className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="checkout-telefono-confirm-title"
+            className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl"
+          >
+            <h2
+              id="checkout-telefono-confirm-title"
+              className="text-xl font-bold text-gray-900"
+            >
+              Teléfono de entrega
+            </h2>
+            <p className="mt-3 text-sm text-gray-600">
+              El número de celular no fue digitado o no tiene 8 dígitos.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setConfirmTelefonoOpen(false);
+                  setPendingCheckoutData(null);
+                  confirmarTelefonoRef.current = false;
+                }}
+              >
+                Volver
+              </Button>
+              <Button
+                type="button"
+                className="bg-[#50C878] text-white hover:bg-[#3aa85c]"
+                onClick={() => {
+                  if (pendingCheckoutData) {
+                    confirmarTelefonoRef.current = true;
+                    setConfirmTelefonoOpen(false);
+                    void onSubmit(pendingCheckoutData);
+                    setPendingCheckoutData(null);
+                  }
+                }}
+              >
+                Sí, grabar pedido
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

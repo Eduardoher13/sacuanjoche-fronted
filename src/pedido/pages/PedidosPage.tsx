@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTablePagination } from '@/shared/hooks/useTablePagination';
 import { DataTable } from '@/shared/components/Custom/DataTable';
 import type { Column } from '@/shared/components/Custom/DataTable';
@@ -20,10 +21,10 @@ import {
 import { usePedido } from '../hook/usePedido';
 import type { Pedido } from '../types/pedido.interface';
 import { PedidoDetailsModal } from '../components/PedidoDetailsModal';
-import { getOrdenTrabajoPdf } from '../actions';
+import { deletePedido, getOrdenTrabajoPdf } from '../actions';
 import { toast } from 'sonner';
 import { cleanErrorMessage } from '@/shared/utils/toastHelpers';
-import { MdReceipt, MdAdd, MdEdit, MdVisibility, MdMoreVert, MdDescription } from 'react-icons/md';
+import { MdReceipt, MdAdd, MdEdit, MdVisibility, MdMoreVert, MdDescription, MdWarningAmber } from 'react-icons/md';
 
 const columns: Column[] = [
   {
@@ -31,10 +32,34 @@ const columns: Column[] = [
     label: 'Cliente',
     priority: 'high', // Siempre visible en móvil
     render: (_value, row: Pedido) => {
-      if (row.cliente) {
-        return `${row.cliente.primerNombre} ${row.cliente.primerApellido}`;
-      }
-      return row.direccionTxt || 'N/A';
+      const nombreCliente = row.cliente
+        ? `${row.cliente.primerNombre} ${row.cliente.primerApellido}`
+        : row.direccionTxt || 'N/A';
+      const telefonoEntrega = row.contactoEntrega?.telefono?.trim();
+
+      return (
+        <div className="flex items-center gap-2">
+          {!telefonoEntrega && (
+            <span
+              className="group relative inline-flex shrink-0 cursor-help"
+              tabIndex={0}
+              aria-label="Numero de entrega no digitado"
+            >
+              <MdWarningAmber
+                className="h-4 w-4 text-red-600"
+                aria-hidden="true"
+              />
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow-lg group-hover:block group-focus:block"
+              >
+                Numero de entrega no digitado
+              </span>
+            </span>
+          )}
+          <span>{nombreCliente}</span>
+        </div>
+      );
     },
   },
   {
@@ -93,7 +118,9 @@ const Pedidos = () => {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedPedidoId, setSelectedPedidoId] = useState<number | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<number | null>(null);
+  const [pedidoToDelete, setPedidoToDelete] = useState<Pedido | null>(null);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Hook de paginación general
   const pagination = useTablePagination(0);
@@ -109,6 +136,20 @@ const Pedidos = () => {
 
   // Recalcular paginación con totalItems real
   const finalPagination = useTablePagination(totalItems);
+
+  const deletePedidoMutation = useMutation({
+    mutationFn: (idPedido: number) => deletePedido(idPedido),
+    onSuccess: async () => {
+      toast.success('Pedido eliminado');
+      await queryClient.invalidateQueries({ queryKey: ['pedidos'] });
+    },
+    onError: (error: unknown) => {
+      toast.error('No se pudo eliminar el pedido', {
+        description: cleanErrorMessage(error),
+        duration: 5000,
+      });
+    },
+  });
 
   const handleGenerateFactura = (pedido: Pedido) => {
     // Asegurar que idPedido sea un número
@@ -163,9 +204,22 @@ const Pedidos = () => {
     [navigate]
   );
 
-  const handleDelete = useCallback((_item: Pedido) => {
-    // TODO: Implementar eliminación del pedido
-  }, []);
+  const handleDelete = useCallback(
+    (item: Pedido) => {
+      const idPedido =
+        typeof item.idPedido === 'string'
+          ? parseInt(item.idPedido, 10)
+          : Number(item.idPedido);
+
+      if (!Number.isFinite(idPedido)) {
+        toast.error('Pedido inválido');
+        return;
+      }
+
+      setPedidoToDelete(item);
+    },
+    [deletePedidoMutation],
+  );
 
   const handleAddPedido = useCallback(() => {
     navigate('/admin/pedidos/nuevo');
@@ -298,6 +352,53 @@ const Pedidos = () => {
           />
         </CardContent>
       </Card>
+      {pedidoToDelete && (
+        <div
+          className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-pedido-title"
+            className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl"
+          >
+            <h2
+              id="delete-pedido-title"
+              className="text-xl font-bold text-gray-900"
+            >
+              Eliminar pedido
+            </h2>
+            <p className="mt-3 text-sm text-gray-600">
+              ¿Estás seguro de que deseas eliminar el pedido #
+              {pedidoToDelete.idPedido}?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPedidoToDelete(null)}
+                disabled={deletePedidoMutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 text-white hover:bg-red-700"
+                disabled={deletePedidoMutation.isPending}
+                onClick={() => {
+                  deletePedidoMutation.mutate(pedidoToDelete.idPedido);
+                  setPedidoToDelete(null);
+                }}
+              >
+                {deletePedidoMutation.isPending
+                  ? 'Eliminando...'
+                  : 'Sí, eliminar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

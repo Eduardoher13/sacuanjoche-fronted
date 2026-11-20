@@ -4,13 +4,13 @@ export interface ContactoEntrega {
   idContactoEntrega?: number;
   nombre: string;
   apellido: string;
-  telefono: string;
+  telefono: string | null;
 }
 
 export interface CreateContactoEntregaDto {
   nombre: string;
   apellido: string;
-  telefono: string;
+  telefono: string | null;
 }
 
 export const createContactoEntrega = async (

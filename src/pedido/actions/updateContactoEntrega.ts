@@ -4,7 +4,7 @@ import type { ContactoEntrega } from './createContactoEntrega';
 export interface UpdateContactoEntregaDto {
   nombre?: string;
   apellido?: string;
-  telefono?: string;
+  telefono?: string | null;
 }
 
 export const updateContactoEntrega = async (

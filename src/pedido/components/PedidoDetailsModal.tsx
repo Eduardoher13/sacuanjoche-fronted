@@ -297,7 +297,11 @@ export function PedidoDetailsModal({
                       <Label className="text-xs text-gray-500">Teléfono</Label>
                       <p className="text-sm font-medium text-gray-900 flex items-center gap-1">
                         <MdPhone className="h-4 w-4" />
-                        {pedido.contactoEntrega.telefono}
+                        {pedido.contactoEntrega.telefono || (
+                          <span className="text-red-600 font-semibold">
+                            Sin número celular de entrega
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>

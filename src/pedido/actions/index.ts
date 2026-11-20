@@ -2,6 +2,7 @@ export { createPedido } from './createPedido';
 export { getPedidos } from './getPedidos';
 export { getPedidoById } from './getPedidoById';
 export { updatePedido } from './updatePedido';
+export { deletePedido } from './deletePedido';
 export { getOrdenTrabajoPdf } from './getOrdenTrabajoPdf';
 export { createDetallePedido } from './createDetallePedido';
 export { updateDetallePedido } from './updateDetallePedido';

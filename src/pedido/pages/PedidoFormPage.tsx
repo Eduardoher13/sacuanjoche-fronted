@@ -23,7 +23,6 @@ import { Badge } from '@/shared/components/ui/badge';
 import { toast } from 'sonner';
 import { cleanErrorMessage } from '@/shared/utils/toastHelpers';
 import {
-  validateTelefono,
   formatTelefonoForBackend,
 } from '@/shared/utils/validation';
 import { ClienteSelect } from '../components/ClienteSelect';
@@ -149,15 +148,17 @@ export default function PedidoFormPage() {
 
   const submitMutation = useMutation({
     mutationFn: async (payload: PedidoFormSubmitPayload) => {
-      // Validar teléfono (mismo patrón que checkout)
-      const telefonoError = validateTelefono(payload.contactoEntrega.telefono);
-      if (telefonoError) {
-        throw new Error(telefonoError);
-      }
+      const telefonoIngresado =
+        payload.contactoEntrega.telefono?.trim() || '';
+      const digitosTelefono = telefonoIngresado.replace(/\D/g, '');
+      const telefonoValido =
+        digitosTelefono.length === 8 ||
+        (digitosTelefono.startsWith('505') && digitosTelefono.length === 11);
 
-      const telefonoBackend = formatTelefonoForBackend(
-        payload.contactoEntrega.telefono,
-      );
+      const telefonoBackend =
+        telefonoIngresado && telefonoValido
+          ? formatTelefonoForBackend(telefonoIngresado)
+          : null;
 
       // Dirección: si viene en payload, crear o actualizar
       let idDireccionFinal = pedido?.idDireccion ?? 0;
@@ -337,6 +338,9 @@ function PedidoFormPageDialog({
 
   // Observar valores del formulario
   const formValues = watch();
+  const [confirmTelefonoOpen, setConfirmTelefonoOpen] = useState(false);
+  const [pendingSubmit, setPendingSubmit] =
+    useState<PedidoFormSubmitPayload | null>(null);
 
   // Estado de dirección (Mapbox data)
   const [direccionData, setDireccionData] = useState<MapboxAddressData | null>(
@@ -616,7 +620,7 @@ function PedidoFormPageDialog({
       subtotal: 0,
     }));
 
-    onSubmit({
+    const submitPayload: PedidoFormSubmitPayload = {
       pedido: pedidoDto,
       direccion: direccionDto,
       contactoEntrega: {
@@ -625,7 +629,21 @@ function PedidoFormPageDialog({
         telefono: data.contactoTelefono,
       },
       detalles,
-    });
+    };
+
+    const telefonoIngresado = data.contactoTelefono?.trim() || '';
+    const digitosTelefono = telefonoIngresado.replace(/\D/g, '');
+    const telefonoValido =
+      digitosTelefono.length === 8 ||
+      (digitosTelefono.startsWith('505') && digitosTelefono.length === 11);
+
+    if (!pedido && (!telefonoIngresado || !telefonoValido)) {
+      setPendingSubmit(submitPayload);
+      setConfirmTelefonoOpen(true);
+      return;
+    }
+
+    onSubmit(submitPayload);
   };
 
   const handleOpenChange = useCallback(
@@ -879,19 +897,17 @@ function PedidoFormPageDialog({
                     htmlFor="contactoTelefono"
                     className="text-sm font-semibold text-gray-700"
                   >
-                    Teléfono *
+                    Teléfono (opcional)
                   </Label>
                   <Input
                     id="contactoTelefono"
-                    {...register('contactoTelefono', {
-                      required: 'El teléfono es requerido',
-                    })}
+                    {...register('contactoTelefono')}
                     placeholder="+505 1234 5678"
                     className="bg-white border-gray-300 text-gray-900 h-11 text-base"
                   />
-                  {errors.contactoTelefono && (
-                    <p className="text-sm text-red-500 mt-1">
-                      {errors.contactoTelefono.message}
+                  {!formValues.contactoTelefono?.trim() && (
+                    <p className="text-sm text-red-600 mt-1 font-medium">
+                      Sin número celular de entrega
                     </p>
                   )}
                 </div>
@@ -1103,6 +1119,55 @@ function PedidoFormPageDialog({
           </form>
         </div>
       </DialogContent>
+      {confirmTelefonoOpen && (
+        <Dialog
+          open={confirmTelefonoOpen}
+          onOpenChange={(open) => {
+            setConfirmTelefonoOpen(open);
+            if (!open) setPendingSubmit(null);
+          }}
+        >
+          <DialogContent
+            className="z-[100] max-w-md border-gray-200 bg-white p-6"
+            aria-describedby={undefined}
+          >
+            <h2
+              id="pedido-telefono-confirm-title"
+              className="text-xl font-bold text-gray-900"
+            >
+              Teléfono de entrega
+            </h2>
+            <p className="mt-3 text-sm text-gray-600">
+              El número de celular no fue digitado o no tiene 8 dígitos.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setConfirmTelefonoOpen(false);
+                  setPendingSubmit(null);
+                }}
+              >
+                Volver
+              </Button>
+              <Button
+                type="button"
+                className="bg-[#50C878] text-white hover:bg-[#3aa85c]"
+                onClick={() => {
+                  if (pendingSubmit) {
+                    setConfirmTelefonoOpen(false);
+                    onSubmit(pendingSubmit);
+                    setPendingSubmit(null);
+                  }
+                }}
+              >
+                Sí, grabar pedido
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

@@ -61,6 +61,8 @@ interface FormValues {
   direccionTexto: string;
 }
 
+type PedidoSubmitPayload = Parameters<PedidoFormProps['onSubmit']>[0];
+
 export function PedidoForm({
   open,
   onOpenChange,
@@ -93,6 +95,9 @@ export function PedidoForm({
 
   // Observar valores del formulario
   const formValues = watch();
+  const [confirmTelefonoOpen, setConfirmTelefonoOpen] = useState(false);
+  const [pendingSubmit, setPendingSubmit] =
+    useState<PedidoSubmitPayload | null>(null);
 
   // Estado de dirección (Mapbox data)
   const [direccionData, setDireccionData] = useState<MapboxAddressData | null>(
@@ -363,7 +368,7 @@ export function PedidoForm({
       subtotal: 0,
     }));
 
-    onSubmit({
+    const submitPayload: PedidoSubmitPayload = {
       pedido: pedidoDto,
       direccion: direccionDto,
       contactoEntrega: {
@@ -372,7 +377,21 @@ export function PedidoForm({
         telefono: data.contactoTelefono,
       },
       detalles,
-    });
+    };
+
+    const telefonoIngresado = data.contactoTelefono?.trim() || '';
+    const digitosTelefono = telefonoIngresado.replace(/\D/g, '');
+    const telefonoValido =
+      digitosTelefono.length === 8 ||
+      (digitosTelefono.startsWith('505') && digitosTelefono.length === 11);
+
+    if (!pedido && (!telefonoIngresado || !telefonoValido)) {
+      setPendingSubmit(submitPayload);
+      setConfirmTelefonoOpen(true);
+      return;
+    }
+
+    onSubmit(submitPayload);
   };
 
   const handleOpenChange = useCallback(
@@ -622,19 +641,17 @@ export function PedidoForm({
                     htmlFor="contactoTelefono"
                     className="text-sm font-semibold text-gray-700"
                   >
-                    Teléfono *
+                    Teléfono (opcional)
                   </Label>
                   <Input
                     id="contactoTelefono"
-                    {...register('contactoTelefono', {
-                      required: 'El teléfono es requerido',
-                    })}
+                    {...register('contactoTelefono')}
                     placeholder="+505 1234 5678"
                     className="bg-white border-gray-300 text-gray-900 h-11 text-base"
                   />
-                  {errors.contactoTelefono && (
-                    <p className="text-sm text-red-500 mt-1">
-                      {errors.contactoTelefono.message}
+                  {!formValues.contactoTelefono?.trim() && (
+                    <p className="text-sm text-red-600 mt-1 font-medium">
+                      Sin número celular de entrega
                     </p>
                   )}
                 </div>
@@ -841,6 +858,55 @@ export function PedidoForm({
           </form>
         </div>
       </DialogContent>
+      {confirmTelefonoOpen && (
+        <Dialog
+          open={confirmTelefonoOpen}
+          onOpenChange={(open) => {
+            setConfirmTelefonoOpen(open);
+            if (!open) setPendingSubmit(null);
+          }}
+        >
+          <DialogContent
+            className="z-[100] max-w-md border-gray-200 bg-white p-6"
+            aria-describedby={undefined}
+          >
+            <h2
+              id="telefono-confirm-title"
+              className="text-xl font-bold text-gray-900"
+            >
+              Teléfono de entrega
+            </h2>
+            <p className="mt-3 text-sm text-gray-600">
+              El número de celular no fue digitado o no tiene 8 dígitos.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setConfirmTelefonoOpen(false);
+                  setPendingSubmit(null);
+                }}
+              >
+                Volver
+              </Button>
+              <Button
+                type="button"
+                className="bg-[#50C878] text-white hover:bg-[#3aa85c]"
+                onClick={() => {
+                  if (pendingSubmit) {
+                    setConfirmTelefonoOpen(false);
+                    onSubmit(pendingSubmit);
+                    setPendingSubmit(null);
+                  }
+                }}
+              >
+                Sí, grabar pedido
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

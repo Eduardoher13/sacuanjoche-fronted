@@ -155,7 +155,15 @@ export default function PedidoConfirmacionPage() {
                   <p className="font-medium text-gray-900">
                     {pedido.contactoEntrega.nombre} {pedido.contactoEntrega.apellido}
                   </p>
-                  <p className="text-sm text-gray-600">{pedido.contactoEntrega.telefono}</p>
+                  {pedido.contactoEntrega.telefono ? (
+                    <p className="text-sm text-gray-600">
+                      {pedido.contactoEntrega.telefono}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-red-600 font-semibold">
+                      Sin número celular de entrega
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
